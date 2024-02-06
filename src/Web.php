@@ -51,6 +51,13 @@ class Web
     private $Attache = '';
 
     /**
+     * @var array
+     *
+     * An array of hashed filenames for each malicious upload detection
+     */
+    private array $maliciousHashedFileNamesMap = [];
+
+    /**
      * Construct the upload handler.
      *
      * @param \phpMussel\Core\Loader $Loader The instantiated loader object, passed by reference.
@@ -290,10 +297,13 @@ class Web
         /** Build detections. */
         $Detections = implode($this->Loader->L10N->getString('grammar_spacer'), $this->Loader->ScanResultsText);
 
+        /** Build malicious hashed filenames */
+        $this->prepareMaliciousHashedFileNamesMap();
+
         /** Log "uploads_log" data. */
         if (strlen($this->Loader->HashReference) !== 0) {
             $Handle['Data'] = sprintf(
-                "%s: %s\n%s: %s\n== %s ==\n%s\n== %s ==\n%s",
+                "%s: %s\n%s: %s\n== %s ==\n%s\n== %s ==\n%s== %s ==\n%s\n",
                 $this->Loader->L10N->getString('field.Date'),
                 $this->Loader->timeFormat($this->Loader->Time, $this->Loader->Configuration['core']['time_format']),
                 $this->Loader->L10N->getString('field.IP address'),
@@ -301,7 +311,9 @@ class Web
                 $this->Loader->L10N->getString('field.Scan results (why flagged)'),
                 $Detections,
                 $this->Loader->L10N->getString('field.Hash signatures reconstruction'),
-                $this->Loader->HashReference
+                $this->Loader->HashReference,
+                'Generated hashed file names of malicious uploads',
+                $this->getMaliciousHashedFileNames()
             );
             if ($this->Loader->PEData) {
                 $Handle['Data'] .= sprintf(
@@ -310,6 +322,7 @@ class Web
                     $this->Loader->PEData
                 );
             }
+
             $Handle['Data'] .= "\n";
             $this->Loader->Events->fireEvent('writeToUploadsLog', $Handle['Data']);
             $Handle = [];
@@ -355,5 +368,42 @@ class Web
                 $FileData['name'] = $Demojibakefier->guard($FileData['name']);
             }
         }
+    }
+
+    /**
+     * @return array
+     */
+    public function getMaliciousHashedFileNamesMap(): array
+    {
+        return $this->maliciousHashedFileNamesMap;
+    }
+
+    private function prepareMaliciousHashedFileNamesMap(): void
+    {
+        foreach ($this->Loader->ScanResultsText as $hashSignature => $detection) {
+            try {
+                $hashedFileName = bin2hex(random_bytes(16));
+            } catch (\Exception) {
+                continue;
+            }
+
+            if ($detection) {
+                $splitSignature = explode('.', $hashSignature);
+                $extension = end($splitSignature);
+                $this->maliciousHashedFileNamesMap[$hashSignature] = $hashedFileName . '_' . time() . '.' . $extension;
+            }
+        }
+    }
+
+    /**
+     * @return string
+     */
+    private function getMaliciousHashedFileNames(): string
+    {
+        $maliciousHashedFileNames = '';
+        foreach ($this->maliciousHashedFileNamesMap as $hashedFileName) {
+            $maliciousHashedFileNames .= "\n" . $hashedFileName;
+        }
+        return ltrim($maliciousHashedFileNames, "\n");
     }
 }
