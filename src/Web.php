@@ -58,6 +58,13 @@ class Web
     private array $maliciousHashedFileNamesMap = [];
 
     /**
+     * @var array
+     *
+     * Holds the results of the uploads scan
+     */
+    private array $scanResults = [];
+
+    /**
      * Construct the upload handler.
      *
      * @param \phpMussel\Core\Loader $Loader The instantiated loader object, passed by reference.
@@ -300,33 +307,8 @@ class Web
         /** Build malicious hashed filenames */
         $this->prepareMaliciousHashedFileNamesMap();
 
-        /** Log "uploads_log" data. */
-        if (strlen($this->Loader->HashReference) !== 0) {
-            $Handle['Data'] = sprintf(
-                "%s: %s\n%s: %s\n== %s ==\n%s\n== %s ==\n%s== %s ==\n%s\n",
-                $this->Loader->L10N->getString('field.Date'),
-                $this->Loader->timeFormat($this->Loader->Time, $this->Loader->Configuration['core']['time_format']),
-                $this->Loader->L10N->getString('field.IP address'),
-                $this->Loader->Configuration['legal']['pseudonymise_ip_addresses'] ? $this->Loader->pseudonymiseIP($this->Loader->IPAddr) : $this->Loader->IPAddr,
-                $this->Loader->L10N->getString('field.Scan results (why flagged)'),
-                $Detections,
-                $this->Loader->L10N->getString('field.Hash signatures reconstruction'),
-                $this->Loader->HashReference,
-                'Generated hashed file names of malicious uploads',
-                $this->getMaliciousHashedFileNames()
-            );
-            if ($this->Loader->PEData) {
-                $Handle['Data'] .= sprintf(
-                    "== %s ==\n%s",
-                    $this->Loader->L10N->getString('field.PE sectional signatures reconstruction'),
-                    $this->Loader->PEData
-                );
-            }
-
-            $Handle['Data'] .= "\n";
-            $this->Loader->Events->fireEvent('writeToUploadsLog', $Handle['Data']);
-            $Handle = [];
-        }
+        /** Prepares scan results */
+        $this->prepareScanResults($Detections, $this->Loader->HashReference);
 
         throw new \Exception($Detections);
     }
@@ -378,6 +360,14 @@ class Web
         return $this->maliciousHashedFileNamesMap;
     }
 
+    /**
+     * @return array
+     */
+    public function getScanResults(): array
+    {
+        return $this->scanResults;
+    }
+
     private function prepareMaliciousHashedFileNamesMap(): void
     {
         foreach ($this->Loader->ScanResultsText as $hashSignature => $detection) {
@@ -405,5 +395,20 @@ class Web
             $maliciousHashedFileNames .= "\n" . $hashedFileName;
         }
         return ltrim($maliciousHashedFileNames, "\n");
+    }
+
+    /**
+     * @param string $detections
+     * @param string $hashSignaturesReconstruction
+     */
+    private function prepareScanResults(string $detections, string $hashSignaturesReconstruction): void
+    {
+        $this->scanResults = [
+            'date' => $this->Loader->timeFormat($this->Loader->Time, $this->Loader->Configuration['core']['time_format']),
+            'ip_address' => $this->Loader->Configuration['legal']['pseudonymise_ip_addresses'] ? $this->Loader->pseudonymiseIP($this->Loader->IPAddr) : $this->Loader->IPAddr,
+            'detections' => $detections,
+            'hashSignaturesReconstruction' => $hashSignaturesReconstruction,
+            'maliciousUploadFileNames' => $this->getMaliciousHashedFileNames()
+        ];
     }
 }
